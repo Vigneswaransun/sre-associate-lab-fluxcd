@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: demoapp
+data:
+  appport: "15000"
+  promport: "20000"
+  jaeger: "http://jaeger-collector.monitoring.svc.cluster.local:14268"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: demoapp
+  annotations:
+    "sidecar.jaegertracing.io/inject": "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      imagePullSecrets:
+      - name: docker-secret
+      containers:
+      - name: backend
+        image: chetanguptahcl/backend:caos
+        imagePullPolicy: Always
+        env:
+        - name: APPPORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: appport
+        - name: PROMPORT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: promport
+        - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config
+              key: jaeger
+        volumeMounts:
+          - name: "logs-data"
+            mountPath: "/logs"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        ports:
+          - name: app
+            containerPort: 15000
+          - name: backend
+            containerPort: 20000
+      volumes:
+        - name: "logs-data"
+          persistentVolumeClaim:
+            claimName: "logs-pvc"
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: demoapp
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 15000
+    targetPort: 15000

@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: demoapp
+data:
+  appport: "15000"
+  promport: "21000"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: demoapp
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      imagePullSecrets:
+        - name: docker-secret
+      containers:
+        - name: frontend
+          image: chetanguptahcl/frontend:caos
+          imagePullPolicy: Always
+          env:
+            - name: APPPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: frontend-config
+                  key: appport
+            - name: PROMPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: frontend-config
+                  key: promport
+          volumeMounts:
+            - name: "logs-data"
+              mountPath: "/logs"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          ports:
+            - name: app
+              containerPort: 15000
+            - name: frontend
+              containerPort: 21000
+      volumes:
+        - name: "logs-data"
+          persistentVolumeClaim:
+            claimName: "logs-pvc"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: demoapp
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - port: 15000
+      targetPort: 15000
